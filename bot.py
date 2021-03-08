@@ -13,6 +13,19 @@ class EcoBot(discord.Client):
             return False
         return True
 
+    async def on_ready(self):
+        print('Logged in as ' + self.user.name)
+        # TODO run job here
+
+    async def on_message(message):
+        if message.channel.id != MEME_CHANNEL_ID:
+            return
+        if message.author.id == bot.user.id:
+            return
+        if not (message.attachments or message.embeds):
+            return
+        await message.add_reaction(REACTION)
+
     async def on_raw_reaction_add(self, payload):
         """When certain meme gets reactions more than MIN_REACTIONS_NUMBER_TO_REPOST we will repost it to top_memes"""
 
