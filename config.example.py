@@ -12,3 +12,4 @@ HOOK = 'YOUR_DISCORD_WEBHOOK_HERE'
 
 # minimum number of reactions to reply
 MIN_REACTIONS_NUMBER_TO_REPOST = 30
+REDIS_HOST_URL = "localhost"

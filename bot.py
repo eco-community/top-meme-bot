@@ -1,6 +1,7 @@
 import aiohttp
 import discord
 import logging
+import redis
 
 import config
 
@@ -8,6 +9,13 @@ logging.basicConfig(filename="eco-memes.log", level=logging.INFO, format="%(asct
 
 
 class EcoBot(discord.Client):
+    # under this key we will store set() of posts that we've replied to the top meme channel
+    REPLIED_POSTS_SET = "REPLIED_POSTS_SET"
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.redis = redis.StrictRedis(host=config.REDIS_HOST_URL, port=6379, db=0)
+
     def is_message_meme(self, message) -> bool:
         """
         If message doesn't have any embeds or attachments probably it is not a meme
@@ -15,6 +23,12 @@ class EcoBot(discord.Client):
         :return: bool
         """
         if not (message.attachments or message.embeds):
+            return False
+        return True
+
+    def is_cached(self, message_id: str) -> bool:
+        # if not cached
+        if not self.redis.sismember(self.REPLIED_POSTS_SET, message_id):
             return False
         return True
 
@@ -33,8 +47,7 @@ class EcoBot(discord.Client):
             webhook = discord.Webhook.from_url(config.HOOK, adapter=discord.AsyncWebhookAdapter(session))
 
             # bot takes username, avatar, copying all content and replying to Top-Meme channel
-            await webhook.send(username=user.name, content=message.content,
-                               avatar_url=user.avatar_url, files=files)
+            await webhook.send(username=user.name, content=message.content, avatar_url=user.avatar_url, files=files)
 
     async def on_ready(self):
         logging.info(f"Logged in as {self.user.name}")
@@ -50,7 +63,7 @@ class EcoBot(discord.Client):
             return
 
         # ignore message if it has not attachments or embeds
-        if not (message.attachments or message.embeds):
+        if not self.is_message_meme(message=message):
             return
 
         # add reaction to message
@@ -62,9 +75,11 @@ class EcoBot(discord.Client):
         :param payload: Discord RawReactionActionEvent Object
         :return: void
         """
-        if payload.channel_id == config.MEME_CHANNEL_ID:
+        message_id = payload.message_id
+
+        if payload.channel_id == config.MEME_CHANNEL_ID and not self.is_cached(message_id):
             unique_users = set()
-            message = await self.get_channel(payload.channel_id).fetch_message(payload.message_id)
+            message = await self.get_channel(payload.channel_id).fetch_message(message_id)
 
             # ensure that message is meme
             if not self.is_message_meme(message=message):
@@ -79,13 +94,16 @@ class EcoBot(discord.Client):
 
             # check if meme got enought unique users
             if len(unique_users) >= config.MIN_REACTIONS_NUMBER_TO_REPOST:
+                # save to cache
+                self.redis.sadd(self.REPLIED_POSTS_SET, message_id)
                 await self.reply_top_meme(message)
             logging.info(f"{payload.emoji} {len(unique_users)}")
 
 
-# This bot requires the members and reactions intents.
-intents = discord.Intents.default()
-intents.members = True
+if __name__ == "__main__":
+    # This bot requires the members and reactions intents.
+    intents = discord.Intents.default()
+    intents.members = True
 
-client = EcoBot(intents=intents)
-client.run(config.TOKEN)
+    client = EcoBot(intents=intents)
+    client.run(config.TOKEN)
