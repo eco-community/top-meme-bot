@@ -1,0 +1,3 @@
+TOKEN = ''
+MEME_CHANNEL_ID = 11111
+REACTION = ':laughing:'
