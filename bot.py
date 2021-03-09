@@ -11,10 +11,16 @@ logging.basicConfig(filename="eco-memes.log", level=logging.INFO, format="%(asct
 class EcoBot(discord.Client):
     # under this key we will store set() of posts that we've replied to the top meme channel
     REPLIED_POSTS_SET = "REPLIED_POSTS_SET"
+    SETTINGS = "SETTINGS"
+    MEME_REACTION_LIMIT = "MEME_REACTION_LIMIT"
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.redis = redis.StrictRedis(host=config.REDIS_HOST_URL, port=6379, db=0)
+
+        # If there are no limit in the Redis database, then we initialize them here with default value 10
+        if not self.redis.hget(self.SETTINGS, self.MEME_REACTION_LIMIT):
+            self.redis.hset(self.SETTINGS, self.MEME_REACTION_LIMIT, 10)
 
     def is_message_meme(self, message) -> bool:
         """
@@ -32,11 +38,26 @@ class EcoBot(discord.Client):
             return False
         return True
 
+    def get_limit(self) -> int:
+        """
+        Get current reactions limit
+        :return: limit
+        """
+        return int(self.redis.hget(self.SETTINGS, self.MEME_REACTION_LIMIT))
+
+    def set_limit(self, limit: int):
+        """
+        Set reactions limit
+        :param limit:
+        :return: None
+        """
+        self.redis.hset(self.SETTINGS, self.MEME_REACTION_LIMIT, limit)
+
     async def reply_top_meme(self, message):
         """
         Function that replies message with embeds and files to Top-Meme channel
         :param message: Discord Message Object
-        :return: void
+        :return: None
         """
         user = client.get_user(message.author.id)
         files = [await pp.to_file() for pp in message.attachments]
@@ -52,28 +73,69 @@ class EcoBot(discord.Client):
     async def on_ready(self):
         logging.info(f"Logged in as {self.user.name}")
 
+    async def command_resolver(self, message, channel):
+        """
+        A function that resolves which command to execute
+        :param message: Discord Message Object
+        :param channel: Discord Channel Object
+        :return: None
+        """
+        if message.content.startswith('!meme.get_limit'):
+            limit = self.get_limit()
+            await channel.send(f"**Current meme limit is:** __{limit}__")
+        elif message.content.startswith('!meme.set_limit'):
+            # Split the message content by spaces
+            limit = message.content.split(' ')
+            # Get number of elements
+            args_len = len(limit) - 1
+
+            # Check if the user sent just !meme.set_limit
+            if args_len == 0:
+                await channel.send(f"**Specify the limit**")
+
+            # Check if the user sent too many arguments
+            elif args_len > 1:
+                await channel.send(f"**Invalid command usage**\nCorrect format is `!meme.set_limit NUMBER`")
+            # Correct input
+            else:
+                try:
+                    self.set_limit(int(limit[args_len]))
+                    await channel.send('**The reaction limit has been successfully updated**')
+                except Exception as e:
+                    await channel.send('**Something went wrong, but I will definitely figure it out!**')
+                    logging.error(e)
+        else:
+            await channel.send(f"**Unknown command**")
+
     async def on_message(self, message):
         """
         Function that adds emoji for new messages which contains embed or file
         :param message: Discord Message Object
-        :return: void
+        :return: None
         """
-        # ignore message if author is bot or if message not in Meme-Channel
-        if message.channel.id != config.MEME_CHANNEL_ID or message.author.id == self.user.id:
-            return
+        # Check if the user sent command
+        if message.content.startswith('!'):
+            channel = message.channel
+            await self.command_resolver(message, channel)
 
-        # ignore message if it has not attachments or embeds
-        if not self.is_message_meme(message=message):
-            return
+        # The user sent common message
+        else:
+            # ignore message if author is bot or if message not in Meme-Channel
+            if message.channel.id != config.MEME_CHANNEL_ID or message.author.id == self.user.id:
+                return
 
-        # add reaction to message
-        await message.add_reaction(config.REACTION)
+            # ignore message if it has not attachments or embeds
+            if not self.is_message_meme(message=message):
+                return
+
+            # add reaction to message
+            await message.add_reaction(config.REACTION)
 
     async def on_raw_reaction_add(self, payload):
         """
         When certain meme gets reactions more than MIN_REACTIONS_NUMBER_TO_REPOST we will repost it to top_memes
         :param payload: Discord RawReactionActionEvent Object
-        :return: void
+        :return: None
         """
         message_id = payload.message_id
 
