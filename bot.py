@@ -36,6 +36,11 @@ def set_reactions_count(count: int):
 
 
 def is_cached(message_id: str) -> bool:
+    """
+    Check if message_id is cached
+    :param message_id: Discord Message ID
+    :return: bool
+    """
     # if not cached
     if not redis.sismember(config.REPLIED_POSTS_SET, message_id):
         return False
@@ -82,6 +87,11 @@ async def on_ready():
 @commands.has_any_role('Eco Team')
 @bot.command('get_count')
 async def get_count(ctx):
+    """
+    Command that replies reactions count
+    :param ctx: Discord Context object
+    :return: None
+    """
     count = get_reactions_count()
     await ctx.send(f"**Current meme count is:** __{count}__")
 
@@ -89,6 +99,12 @@ async def get_count(ctx):
 @commands.has_any_role('Eco Team')
 @bot.command('set_count')
 async def set_count(ctx, *args):
+    """
+    Command that sets reactions count
+    :param ctx: Discord Context object
+    :param args: Tuple of arguments
+    :return: None
+    """
     # Get number of elements
     args_len = len(args)
 
