@@ -2,17 +2,30 @@ import aiohttp
 import discord
 import logging
 import redis
+from sentry_sdk.integrations.redis import RedisIntegration
+from sentry_sdk.integrations.aiohttp import AioHttpIntegration
 from discord.ext import commands
 
 import config
 
+from constants import SENTRY_ENV_NAME
+from utils import use_sentry
+
 # initialize bot params
 intents = discord.Intents.default()
 intents.members = True
-bot = commands.Bot(command_prefix='!reactions.', intents=intents)
+bot = commands.Bot(command_prefix="!reactions.", intents=intents)
+
+# init sentry SDK
+use_sentry(
+    bot,
+    dsn=config.SENTRY_API_KEY,
+    environment=SENTRY_ENV_NAME,
+    integrations=[RedisIntegration(), AioHttpIntegration()],
+)
 
 # initialize redis
-redis = redis.StrictRedis(host=config.REDIS_HOST_URL, port=6379, db=0)
+redis_client = redis.StrictRedis(host=config.REDIS_HOST_URL, port=6379, db=0)
 
 # setup logger
 logging.basicConfig(filename="eco-memes.log", level=logging.INFO, format="%(asctime)s %(levelname)s:%(message)s")
@@ -23,7 +36,7 @@ def get_reactions_count() -> int:
     Get current reactions count
     :return: count
     """
-    return int(redis.hget(config.SETTINGS, config.MEME_REACTION_COUNT))
+    return int(redis_client.hget(config.SETTINGS, config.MEME_REACTION_COUNT))  # type: ignore[arg-type]
 
 
 def set_reactions_count(count: int):
@@ -32,7 +45,7 @@ def set_reactions_count(count: int):
     :param count:
     :return: None
     """
-    redis.hset(config.SETTINGS, config.MEME_REACTION_COUNT, count)
+    redis_client.hset(config.SETTINGS, config.MEME_REACTION_COUNT, count)
 
 
 def is_cached(message_id: str) -> bool:
@@ -41,10 +54,7 @@ def is_cached(message_id: str) -> bool:
     :param message_id: Discord Message ID
     :return: bool
     """
-    # if not cached
-    if not redis.sismember(config.REPLIED_POSTS_SET, message_id):
-        return False
-    return True
+    return redis_client.sismember(config.REPLIED_POSTS_SET, message_id)
 
 
 def is_message_meme(message) -> bool:
@@ -71,21 +81,21 @@ async def reply_top_meme(message):
     async with aiohttp.ClientSession() as session:
         # get Webhook object from url and session
         webhook = discord.Webhook.from_url(config.HOOK, adapter=discord.AsyncWebhookAdapter(session))
-
         # bot takes username, avatar, copying all content and replying to Top-Meme channel
-        await webhook.send(username=user.name, content=message.content, avatar_url=user.avatar_url, files=files)
+        message_with_url = f"{message.content} [view original](<{message.jump_url}>)"
+        await webhook.send(username=user.name, content=message_with_url, avatar_url=user.avatar_url, files=files)
 
 
 @bot.event
 async def on_ready():
     logging.info(f"Logged in as {bot.user.name}")
     # If there are no reactions count in the Redis database, then we initialize it here with default value 10
-    if not redis.hget(config.SETTINGS, config.MEME_REACTION_COUNT):
+    if not redis_client.hget(config.SETTINGS, config.MEME_REACTION_COUNT):
         set_reactions_count(10)
 
 
-@commands.has_any_role('Eco Team')
-@bot.command('get_count')
+@commands.has_any_role("Eco Team")
+@bot.command("get_count")
 async def get_count(ctx):
     """
     Command that replies reactions count
@@ -96,37 +106,29 @@ async def get_count(ctx):
     await ctx.send(f"**Current meme count is:** __{count}__")
 
 
-@commands.has_any_role('Eco Team')
-@bot.command('set_count')
-async def set_count(ctx, *args):
+@commands.has_any_role("Eco Team")
+@bot.command("set_count")
+async def set_count(ctx, set_count_to: str = "", *args):
     """
     Command that sets reactions count
     :param ctx: Discord Context object
     :param args: Tuple of arguments
     :return: None
     """
-    # Get number of elements
-    args_len = len(args)
 
-    # Check if the user sent just !reactions.set_count
-    if args_len == 0:
-        await ctx.send(f"**Specify the count**")
-
-    # Check if the user sent too many arguments
-    elif args_len > 1:
-        await ctx.send(f"**Invalid command usage**\nCorrect format is `!reactions.set_count NUMBER`")
-    # Correct input
-    else:
-        try:
-            set_reactions_count(int(args[0]))
-            await ctx.send(f"**The reaction count has been updated to {args[0]}**")
-        except Exception as e:
-            await ctx.send('**Something went wrong, but I will definitely figure it out!**')
-            logging.error(e)
+    try:
+        set_to_int = int(set_count_to)
+        if set_to_int <= 0:
+            await ctx.send("**Invalid command usage**\nCorrect format is `!reactions.set_count INTEGER`")
+            return
+        set_reactions_count(set_to_int)
+        await ctx.send(f"**The reaction count has been updated to {set_to_int}**")
+    except ValueError:
+        await ctx.send("**Invalid command usage**\nCorrect format is `!reactions.set_count INTEGER`")
 
 
-@commands.has_any_role('Eco Team')
-@bot.listen('on_message')
+@commands.has_any_role("Eco Team")
+@bot.listen("on_message")
 async def meme_watcher(message):
     """
     Function that adds emoji for new messages which contains embed or file
@@ -172,7 +174,7 @@ async def on_raw_reaction_add(payload):
         # check if meme got enought unique users
         if len(unique_users) >= get_reactions_count():
             # save to cache
-            redis.sadd(config.REPLIED_POSTS_SET, message_id)
+            redis_client.sadd(config.REPLIED_POSTS_SET, message_id)
             await reply_top_meme(message)
         logging.info(f"{payload.emoji} {len(unique_users)}")
 
