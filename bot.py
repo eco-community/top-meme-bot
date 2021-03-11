@@ -74,7 +74,7 @@ async def reply_top_meme(message):
     :param message: Discord Message Object
     :return: None
     """
-    user = bot.get_user(message.author.id)
+    user = await bot.fetch_user(message.author.id)
     files = [await pp.to_file() for pp in message.attachments]
 
     # create async http transport session
