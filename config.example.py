@@ -10,12 +10,6 @@ REACTION = '🤣'
 # discord webhook
 HOOK = 'YOUR_DISCORD_WEBHOOK_HERE'
 
-REDIS_HOST_URL = "localhost"
-
-REPLIED_POSTS_SET = "REPLIED_POSTS_SET"
-
-SETTINGS = "SETTINGS"
-
-MEME_REACTION_COUNT = "MEME_REACTION_COUNT"
+REDIS_HOST_URL = "redis://localhost:6379/0"
 
 SENTRY_API_KEY = "https://xxxxxx@xxxxx.ingest.sentry.io/xxxxxx"
