@@ -1,10 +1,10 @@
 import aiohttp
 import discord
 import logging
+import asyncio
 import aioredis
 from discord.ext import commands
 from aioredlock import Aioredlock, LockError
-from sentry_sdk.integrations.redis import RedisIntegration
 from sentry_sdk.integrations.aiohttp import AioHttpIntegration
 
 import config
@@ -15,18 +15,18 @@ from constants import SENTRY_ENV_NAME, SETTINGS, MEME_REACTION_COUNT, REPLIED_PO
 # initialize bot params
 intents = discord.Intents.default()
 intents.members = True
-bot = commands.Bot(command_prefix="!reactions.", intents=intents)
+bot = commands.Bot(command_prefix="~reactions.", intents=intents)
 
 # init sentry SDK
 use_sentry(
     bot,
     dsn=config.SENTRY_API_KEY,
     environment=SENTRY_ENV_NAME,
-    integrations=[RedisIntegration(), AioHttpIntegration()],
+    integrations=[AioHttpIntegration()],
 )
 
 # setup logger
-logging.basicConfig(filename="eco-memes.log", level=logging.INFO, format="%(asctime)s %(levelname)s:%(message)s")
+logging.basicConfig(filename="eco-memes.log", level=logging.DEBUG, format="%(asctime)s %(levelname)s:%(message)s")
 
 
 async def get_reactions_count() -> int:
@@ -183,11 +183,16 @@ async def on_raw_reaction_add(payload):
                 # save to cache
                 await bot.redis_client.sadd(REPLIED_POSTS_SET, payload.message_id)
                 await reply_top_meme(message)
+                # give redis sadd a little bit of breathing time
+                await asyncio.sleep(0.3)
     except LockError:
         pass
 
 
 if __name__ == "__main__":
-    bot.redis_lock = Aioredlock(redis_connections=[config.REDIS_HOST_URL])
+    bot.redis_lock = Aioredlock(
+        redis_connections=[config.REDIS_HOST_URL],
+        retry_count=1,
+    )
     bot.redis_client = bot.loop.run_until_complete(aioredis.create_redis_pool(address=config.REDIS_HOST_URL))
     bot.run(config.TOKEN)
