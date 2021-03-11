@@ -10,6 +10,6 @@ REACTION = '🤣'
 # discord webhook
 HOOK = 'YOUR_DISCORD_WEBHOOK_HERE'
 
-# minimum number of reactions to reply
-MIN_REACTIONS_NUMBER_TO_REPOST = 30
-REDIS_HOST_URL = "localhost"
+REDIS_HOST_URL = "redis://localhost:6379/0"
+
+SENTRY_API_KEY = "https://xxxxxx@xxxxx.ingest.sentry.io/xxxxxx"
