@@ -9,7 +9,7 @@ from sentry_sdk.integrations.aiohttp import AioHttpIntegration
 
 import config
 from utils import use_sentry
-from constants import SENTRY_ENV_NAME, SETTINGS, MEME_REACTION_COUNT, REPLIED_POSTS_SET
+from constants import SENTRY_ENV_NAME, SETTINGS, MEME_REACTION_COUNT, REPLIED_POSTS_SET, ROLES_CAN_CONTROL_BOT
 
 
 # initialize bot params
@@ -94,7 +94,7 @@ async def on_ready():
         await set_reactions_count(10)
 
 
-@commands.has_any_role("Eco Team")
+@commands.has_any_role(*ROLES_CAN_CONTROL_BOT)
 @bot.command("get_count")
 async def get_count(ctx):
     """
@@ -106,7 +106,7 @@ async def get_count(ctx):
     await ctx.send(f"**Current meme count is:** __{count}__")
 
 
-@commands.has_any_role("Eco Team")
+@commands.has_any_role(*ROLES_CAN_CONTROL_BOT)
 @bot.command("set_count")
 async def set_count(ctx, set_count_to: str = "", *args):
     """
@@ -127,7 +127,7 @@ async def set_count(ctx, set_count_to: str = "", *args):
         await ctx.send("**Invalid command usage**\nCorrect format is `!reactions.set_count INTEGER`")
 
 
-@commands.has_any_role("Eco Team")
+@commands.has_any_role(*ROLES_CAN_CONTROL_BOT)
 @bot.listen("on_message")
 async def meme_watcher(message):
     """
