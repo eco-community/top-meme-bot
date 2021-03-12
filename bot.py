@@ -4,7 +4,6 @@ import logging
 import asyncio
 import aioredis
 from discord.ext import commands
-from aioredlock import Aioredlock, LockError
 from sentry_sdk.integrations.aiohttp import AioHttpIntegration
 
 import config
@@ -26,8 +25,7 @@ use_sentry(
 )
 
 # setup logger
-logging.basicConfig(filename="eco-memes.log", level=logging.DEBUG,
-                    format="%(asctime)s %(levelname)s:%(message)s")
+logging.basicConfig(filename="eco-memes.log", level=logging.INFO, format="%(asctime)s %(levelname)s:%(message)s")
 
 
 async def get_reactions_count() -> int:
@@ -81,8 +79,7 @@ async def reply_top_meme(message):
     # create async http transport session
     async with aiohttp.ClientSession() as session:
         # get Webhook object from url and session
-        webhook = discord.Webhook.from_url(
-            config.HOOK, adapter=discord.AsyncWebhookAdapter(session))
+        webhook = discord.Webhook.from_url(config.HOOK, adapter=discord.AsyncWebhookAdapter(session))
         # bot takes username, avatar, copying all content and replying to Top-Meme channel
         message_with_url = f"{message.content}\n\n[View Original](<{message.jump_url}>)"
         await webhook.send(username=user.name, content=message_with_url, avatar_url=user.avatar_url, files=files)
@@ -186,16 +183,10 @@ async def process_reactions():
                     await reply_top_meme(message)
             await asyncio.sleep(60)
         except Exception as e:
-            logging.ERROR(e)
+            logging.critical(e, exc_info=True)
 
 
 if __name__ == "__main__":
-    # I think we dont need this
-    bot.redis_lock = Aioredlock(
-        redis_connections=[config.REDIS_HOST_URL],
-        retry_count=1,
-    )
     bot.loop.create_task(process_reactions())
-    bot.redis_client = bot.loop.run_until_complete(
-        aioredis.create_redis_pool(address=config.REDIS_HOST_URL))
+    bot.redis_client = bot.loop.run_until_complete(aioredis.create_redis_pool(address=config.REDIS_HOST_URL))
     bot.run(config.TOKEN)
