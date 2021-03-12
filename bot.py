@@ -26,7 +26,8 @@ use_sentry(
 )
 
 # setup logger
-logging.basicConfig(filename="eco-memes.log", level=logging.DEBUG, format="%(asctime)s %(levelname)s:%(message)s")
+logging.basicConfig(filename="eco-memes.log", level=logging.DEBUG,
+                    format="%(asctime)s %(levelname)s:%(message)s")
 
 
 async def get_reactions_count() -> int:
@@ -80,7 +81,8 @@ async def reply_top_meme(message):
     # create async http transport session
     async with aiohttp.ClientSession() as session:
         # get Webhook object from url and session
-        webhook = discord.Webhook.from_url(config.HOOK, adapter=discord.AsyncWebhookAdapter(session))
+        webhook = discord.Webhook.from_url(
+            config.HOOK, adapter=discord.AsyncWebhookAdapter(session))
         # bot takes username, avatar, copying all content and replying to Top-Meme channel
         message_with_url = f"{message.content}\n\n[View Original](<{message.jump_url}>)"
         await webhook.send(username=user.name, content=message_with_url, avatar_url=user.avatar_url, files=files)
@@ -147,52 +149,53 @@ async def meme_watcher(message):
     await message.add_reaction(config.REACTION)
 
 
-@bot.event
-async def on_raw_reaction_add(payload):
+async def process_reactions():
     """
+    Task for processing reactions.
     When certain meme gets reactions more than MIN_REACTIONS_NUMBER_TO_REPOST we will repost it to top_memes
-    :param payload: Discord RawReactionActionEvent Object
-    :return: None
     """
-    # use redis lock to prevent race condition during quick reactions on meme
-    try:
-        async with await bot.redis_lock.lock(f"redis_lock_for_{payload.message_id}"):
-            is_meme_channel = payload.channel_id == config.MEME_CHANNEL_ID
-            message_already_replied = await is_cached(payload.message_id)
-            reaction_author_bot = payload.user_id == bot.user.id
+    while True:
+        try:
+            # wait until bot is ready
+            await bot.wait_until_ready()
+            channel = bot.get_channel(config.MEME_CHANNEL_ID)
 
-            if not is_meme_channel and message_already_replied and reaction_author_bot:
-                return
+            # get list of all messages (it's not as slow as you might think)
+            messages = await channel.history(limit=None, oldest_first=True).flatten()
 
-            message = await bot.get_channel(payload.channel_id).fetch_message(payload.message_id)
+            # iterate over the messages with standard checks
+            for message in messages:
+                if message.author.id == bot.user.id:
+                    continue
+                if not is_message_meme(message=message):
+                    continue
+                if await is_cached(message.id):
+                    continue
 
-            # ensure that message is meme
-            if not is_message_meme(message=message):
-                return
+                # count unique users for message
+                unique_users = set()
+                for reaction in message.reactions:
+                    async for user in reaction.users():
+                        if user.id == bot.user.id:
+                            continue
+                        unique_users.add(user)
 
-            # count unique users for message
-            unique_users = set()
-            for reaction in message.reactions:
-                async for user in reaction.users():
-                    if user.id == bot.user.id:
-                        continue
-                    unique_users.add(user)
-
-            # check if meme got enought unique users
-            if len(unique_users) >= await get_reactions_count():
-                # save to cache
-                await bot.redis_client.sadd(REPLIED_POSTS_SET, payload.message_id)
-                await reply_top_meme(message)
-                # give redis sadd a little bit of breathing time
-                await asyncio.sleep(0.3)
-    except LockError:
-        pass
+                # check if meme got enought unique users
+                if len(unique_users) >= await get_reactions_count():
+                    await bot.redis_client.sadd(REPLIED_POSTS_SET, message.id)
+                    await reply_top_meme(message)
+            await asyncio.sleep(60)
+        except Exception as e:
+            logging.ERROR(e)
 
 
 if __name__ == "__main__":
+    # I think we dont need this
     bot.redis_lock = Aioredlock(
         redis_connections=[config.REDIS_HOST_URL],
         retry_count=1,
     )
-    bot.redis_client = bot.loop.run_until_complete(aioredis.create_redis_pool(address=config.REDIS_HOST_URL))
+    bot.loop.create_task(process_reactions())
+    bot.redis_client = bot.loop.run_until_complete(
+        aioredis.create_redis_pool(address=config.REDIS_HOST_URL))
     bot.run(config.TOKEN)
