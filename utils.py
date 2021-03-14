@@ -21,4 +21,4 @@ def use_sentry(client, **sentry_args):
     async def on_command_error(msg, error):
         # don't report errors to sentry related to wrong permissions
         if not isinstance(error, (commands.MissingRole, commands.MissingAnyRole)):
-            raise
+            raise error
