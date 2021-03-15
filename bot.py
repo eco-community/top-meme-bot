@@ -172,10 +172,15 @@ async def process_reactions():
                 # count unique users for message
                 unique_users = set()
                 for reaction in message.reactions:
-                    async for user in reaction.users():
-                        if user.id == bot.user.id:
-                            continue
-                        unique_users.add(user)
+                    try:
+                        users = await reaction.users().flatten()
+                        for user in users:
+                            if user.id == bot.user.id:
+                                continue
+                            unique_users.add(user)
+                    except discord.errors.NotFound:
+                        # message could be deleted till that time when we finish iterating over it's reactions
+                        pass
 
                 # check if meme got enought unique users
                 if len(unique_users) >= await get_reactions_count():
