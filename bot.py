@@ -8,7 +8,7 @@ from sentry_sdk.integrations.aiohttp import AioHttpIntegration
 
 import config
 from utils import use_sentry
-from constants import SENTRY_ENV_NAME, SETTINGS, MEME_REACTION_COUNT, REPLIED_POSTS_SET, ROLES_CAN_CONTROL_BOT
+from constants import SENTRY_ENV_NAME, SETTINGS, MEME_REACTION_COUNT, REPLIED_POSTS_SET
 
 
 # initialize bot params
@@ -25,7 +25,7 @@ use_sentry(
 )
 
 # setup logger
-logging.basicConfig(filename="eco-memes.log", level=logging.INFO, format="%(asctime)s %(levelname)s:%(message)s")
+logging.basicConfig(filename="memes.log", level=logging.INFO, format="%(asctime)s %(levelname)s:%(message)s")
 
 
 async def get_reactions_count() -> int:
@@ -93,7 +93,7 @@ async def on_ready():
         await set_reactions_count(10)
 
 
-@commands.has_any_role(*ROLES_CAN_CONTROL_BOT)
+@commands.has_any_role(*config.ROLES_CAN_CONTROL_BOT)
 @bot.command("get_count")
 async def get_count(ctx):
     """
@@ -105,7 +105,7 @@ async def get_count(ctx):
     await ctx.send(f"**Current meme count is:** __{count}__")
 
 
-@commands.has_any_role(*ROLES_CAN_CONTROL_BOT)
+@commands.has_any_role(*config.ROLES_CAN_CONTROL_BOT)
 @bot.command("set_count")
 async def set_count(ctx, set_count_to: str = "", *args):
     """
@@ -126,7 +126,7 @@ async def set_count(ctx, set_count_to: str = "", *args):
         await ctx.send("**Invalid command usage**\nCorrect format is `!reactions.set_count INTEGER`")
 
 
-@commands.has_any_role(*ROLES_CAN_CONTROL_BOT)
+@commands.has_any_role(*config.ROLES_CAN_CONTROL_BOT)
 @bot.listen("on_message")
 async def meme_watcher(message):
     """

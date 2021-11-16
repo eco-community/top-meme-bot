@@ -1,5 +1,7 @@
-SENTRY_ENV_NAME = "eco_meme_bot"
+from config import PROJECT_NAME
+
+
+SENTRY_ENV_NAME = f"{PROJECT_NAME}_meme_bot".lower()
 REPLIED_POSTS_SET = "REPLIED_POSTS_SET"
 SETTINGS = "SETTINGS"
 MEME_REACTION_COUNT = "MEME_REACTION_COUNT"
-ROLES_CAN_CONTROL_BOT = ["Eco Team", "Infrastructure Engineer"]

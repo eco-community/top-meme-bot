@@ -1,4 +1,4 @@
-# EcoMemeBot
+# MemeBot
 
 Bot which is able to detect how many users reacted to meme and repost it to the top meme channel
 
